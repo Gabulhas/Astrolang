@@ -9,3 +9,4 @@ edition = "2021"
 astroparser = {path = "../astroparser"}
 pest = "2.5.5"
 pest_derive = "2.5.5"
+immutable-map = "0.1.2"
