@@ -1,0 +1,199 @@
+//Imports look like lua programming language
+
+//These are comments
+/*
+These are multiline comments
+
+*/
+
+//Struct attributes or functions with first capital letter indicates that it's public, like Go
+
+// if there exists a context, it is defined in [], like shown bellow
+// if there's only a context and no other arguments, there's no need for (), as it would look like InitImageboard[InitImageboardContext]()
+InitImageboard[InitImageboardContext] {
+    // context is accessed with ctx
+    // variable declaration is done like so, similar to Go
+    authority := ctx.accounts.Authority
+    //find something to replace "accounts"
+    ctx.accounts.Imageboard = Imageboard.New(authority.key())
+    //Explicit result types
+}
+
+
+
+//if there are any arguments, they are defined inside (...)
+StartThread[StartThread](text String, image [u8; 32]) {
+    userAcc = ctx.accounts.User
+    imageboardAcc = ctx.accounts.Imageboard
+    ctx.accounts.Thread = Threads.New(Content.New(userAcc.key(), text, image), imageboardAcc.Threads + 1)
+    imageboardAcc.Threads += 1
+}
+
+
+//Definition of entry points
+Entries [
+    StartThread
+    InitImageboard
+]
+
+
+//This is a function that doens't take a context, and returns a value
+MyFunction(a u32, b u32) -> u32 {
+    return a * b
+}
+
+
+// Possible to define post and preconditions in functions
+
+// Import the required libraries
+import SystemProgram // This imports the module SystemProgram.astro or whatever is in this enviromnet
+import Signature     // Same as this
+
+// Define the context for the token contract
+context Token [
+    // Declare the signer for the token contract
+    mut Signer signer,
+
+    // Declare the system program account
+    SystemProgram program,
+
+    // Decorate the account with the init, payer, space, and seeds attributes
+    #[
+        init
+        payer = signer
+        space = Token::SIZE
+        seeds = ["token"]
+        bump
+    ]
+    mut TokenAccount Account[Token],
+]
+
+// Define the state for the token contract
+state Token [
+    // Declare the total supply of tokens
+    TotalSupply u64,
+
+    // Declare the balance of tokens for each account
+    // CHANGE THIS: this should 
+    Balances map<Pubkey, u64>,
+]
+
+// Implement the init function for the token contract
+InitToken[TokenContext] Result<()> {
+    // Access the context through the ctx variable
+    ctx.TokenAccount.TotalSupply = 1000000000
+    ctx.TokenAccount.Balances[ctx.signer.key()] = 1000000000
+    Ok(())
+}
+
+// Implement the transfer function for the token contract
+Transfer[Token](to: Pubkey, amount: u64) Result<()> {
+    fromBalance := ctx.TokenAccount.Balances[ctx.signer.key()]
+    toBalance := ctx.TokenAccount.Balances[to]
+    if fromBalance < amount {
+        return Err("Not enough funds")
+    }
+    ctx.TokenAccount.Balances[ctx.signer.key()] -= amount
+    ctx.TokenAccount.Balances[to] += amount
+    Ok(())
+}
+
+// Implement the balance function for the token contract
+GetBalance[Token](of: Pubkey) Result<u64> {
+    balance := ctx.TokenAccount.Balances[of]
+    Ok(balance)
+}
+
+
+// Keywords for formal verification are part of the language itself, but not necessary
+// fvimports are formal verification imports/helpers, only used by other tools
+fvimport fact
+
+routine(n i32) i32 
+requires({ n >= 0 })
+{
+    let mut u = 1
+    for(r = 0; r < n; r++)invariant({ u = fact r }) 
+    {
+        let mut v = u
+        for(s = 1; s <= r; s++) invariant ({ u = fact r })
+        {
+            u = u + v
+        }
+    }
+    //implicit returns
+    u
+
+}(ensures { result = fact n })
+
+
+
+context InitImageboard [
+    //mut means it's mutable
+    mut Authority Signer,
+
+    // this is used to decorators, like Anchor framework for solana
+    #[
+        init
+        payer = authority
+        space = Imageboard::SIZE
+        seeds = ["imageboard"]
+        bump
+    ]
+    // Generic for Account over state Imageboard
+    Imageboard Account[Imageboard],
+
+    SystemProgram Program[System],
+]
+
+context StartThread [
+
+    mut User Signer
+
+    // the decoration on attributes is as follows
+    // every argument in it is separated by newlines
+    #[
+        seeds = ["imageboard"]
+        bump
+    ]
+    mut imageboard Account<Imageboard>
+
+    #[
+        init
+        payer = user
+        space = Threads::SIZE
+        seeds = ["thread", imageboard.Threads + 1]
+        bump
+    ]
+    Thread Account[Threads],
+
+    SystemProgram Program[System],
+]
+
+
+//this is how we define state or account, the keyword means the same thing, so can be used interchangebly
+state Imageboard [ 
+    // <NameOfAttribute> <TypeOfAttribute>
+    Authority Pubkey 
+    Threads   u64     
+]
+
+
+// structs
+struct Task [
+    done        bool
+    task        string[100]
+    metadata    string[100]
+]
+
+
+// Go like OOP
+// Since there's 
+(Task t) getMetadataIfDone() -> Option<String>{
+    if t.done {
+        Some(t.task)
+    } else {
+        None
+    }
+
+}

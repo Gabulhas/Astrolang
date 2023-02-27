@@ -1,0 +1,233 @@
+num:u32 = 42
+num, num2 = 42, 90
+a:(u32 * u32) = 4, 5
+arr:[u32]  = {4, 5}
+num = 40 
+myfunc:[u32 -> u32] = function (y:u32) -> u32 return x + y end
+
+myMap: [string:u32]= {
+   ["a"] = 127,
+   ["b"] = 230
+}
+
+
+
+s:string= 'walternate'
+t = "double-quotes are also fine"
+u = [[ Double brackets
+       start and end
+       multi-line strings.]]
+
+
+-- t = nil  -- TODO: change this to a Option<Type>
+
+-- Blocks are denoted with keywords like do/end:
+while num < 50 do
+  num = num + 1  -- No ++ or += type operators.
+end
+
+
+
+-- If clauses:
+if num > 40 then
+  print('over 40')
+elseif s ~= 'walternate' then  -- ~= is not equals.
+  -- Equality check is == like Python; ok for strs.
+  io.write('not over 40\n')  -- Defaults to stdout.
+else
+  -- Variables are global by default.
+  thisIsGlobal = 5  -- Camel case is common.
+
+  -- How to make a variable local:
+  line = io.read()  -- Reads next stdin line.
+
+  -- String concatenation uses the .. operator:
+  print('Winter is coming, ' .. line)
+end
+
+-- Undefined variables return nil.
+-- This is not an error:
+foo = anUnknownVariable  -- Now foo = nil.
+
+aBoolValue = false
+
+
+
+karlSum = 0
+for(i:u32 = 1; i < 10)do 
+  karlSum = karlSum + i
+end
+
+fredSum = 0
+for (j = 100; 1; -1) do fredSum = fredSum + j end
+
+-- In general, the range is begin, end[, step].
+
+
+
+----------------------------------------------------
+-- 2. Functions.
+----------------------------------------------------
+
+function fib(n:u32) -> u32
+  if n < 2 then return 1 end
+  return fib(n - 2) + fib(n - 1)
+end
+
+function adder(x:u32) -> u32
+  return fn (y:u32) -> u32 return x + y end
+end
+
+function Point.new(x: number, y: number) -> Point
+   self: Point = setmetatable({}, { __index = Point })
+   self.x = x or 0
+   self.y = y or 0
+   return self
+end
+
+function Point:move(dx: number, dy: number)
+   self.x = self.x + dx
+   self.y = self.y + dy
+end
+
+a1 = adder(9)
+a2 = adder(36)
+print(a1(16))  --> 25
+print(a2(64))  --> 100
+
+-- Returns, func calls, and assignments all work
+-- with lists that may be mismatched in length.
+-- Unmatched receivers are nil;
+-- unmatched senders are discarded.
+
+x, y, z = 1, 2, 3, 4
+-- Now x = 1, y = 2, z = 3, and 4 is thrown away.
+
+function bar(a:u32, b:u32, c:u32)
+  print(a, b, c)
+  return 4, 8, 15, 16, 23, 42
+end
+
+x, y = bar('zaphod')  --> prints "zaphod  nil nil"
+-- Now x = 4, y = 8, values 15..42 are discarded.
+
+-- Functions are first-class, may be local/global.
+-- These are the same:
+function f(x:u32)->u32 return x * x end
+f = fn (x:u32)->u32 return x * x end
+
+print 'hello'  -- Works fine.
+
+
+----------------------------------------------------
+-- Records/Tables/Structs
+----------------------------------------------------
+struct MyType 
+    x: u32,
+    y: u32,
+end
+
+t:MyType = {key1 = 'value1', key2 = false}
+
+-- String keys can use js-like dot notation:
+print(t.key1)  -- Prints 'value1'.
+t.newKey = {}  -- Adds a new key/value pair.
+t.key2 = nil   -- Removes key2 from the table.
+
+
+-- TODO: add support for anonymous/unnamed structs
+
+----------------------------------------------------
+-- Class-like structs and inheritance.
+----------------------------------------------------
+
+-- Classes aren't built in; there are different ways
+-- to make them using tables and metatables.
+
+-- Explanation for this example is below it.
+
+struct Dog                                 -- 1.
+    sound: string,
+end                                 
+
+-- Using the : means that the function will implictly take the self parameter
+function Dog:new()                         -- 2.
+  newObj = {sound = 'woof'}                -- 3.
+  self.__index = self                      -- 4.
+  return setmetatable(newObj, self)        -- 5.
+end
+
+function Dog:makeSound()                   -- 6.
+  print('I say ' .. self.sound)
+end
+
+mrDog = Dog.new()                          -- 7.
+mrDog.makeSound()  -- 'I say woof'         -- 8.
+
+-- 1. Dog acts like a class; it's really a table.
+-- 2. function tablename:fn(...) is the same as
+--    function tablename.fn(self, ...)
+--    The : just adds a first arg called self.
+--    Read 7 & 8 below for how self gets its value.
+-- 3. newObj will be an instance of class Dog.
+-- 4. self = the class being instantiated. Often
+--    self = Dog, but inheritance can change it.
+--    newObj gets self's functions when we set both
+--    newObj's metatable and self's __index to self.
+-- 5. Reminder: setmetatable returns its first arg.
+-- 6. The : works as in 2, but this time we expect
+--    self to be an instance instead of a class.
+-- 7. Same as Dog.new(Dog), so self = Dog in new().
+-- 8. Same as mrDog.makeSound(mrDog); self = mrDog.
+
+----------------------------------------------------
+
+-- Inheritance example:
+
+LoudDog = Dog.new()                           -- 1.
+
+function LoudDog:makeSound()
+  s = self.sound .. ' '                       -- 2.
+  print(s .. s .. s)
+end
+
+seymour = LoudDog.new()                       -- 3.
+seymour.makeSound()  -- 'woof woof woof'      -- 4.
+
+-- 1. LoudDog gets Dog's methods and variables.
+-- 2. self has a 'sound' key from new(), see 3.
+-- 3. Same as LoudDog.new(LoudDog), and converted to
+--    Dog.new(LoudDog) as LoudDog has no 'new' key,
+--    but does have __index = Dog on its metatable.
+--    Result: seymour's metatable is LoudDog, and
+--    LoudDog.__index = LoudDog. So seymour.key will
+--    = seymour.key, LoudDog.key, Dog.key, whichever
+--    table is the first with the given key.
+-- 4. The 'makeSound' key is found in LoudDog; this
+--    is the same as LoudDog.makeSound(seymour).
+
+-- If needed, a subclass's new() is like the base's:
+
+
+-- TODO: do proper inheritance or composition like Go
+
+function LoudDog:new()
+  newObj = {}
+  -- set up newObj
+  self.__index = self
+  return setmetatable(newObj, self)
+end
+
+----------------------------------------------------
+-- 4. Modules.
+----------------------------------------------------
+
+-- TODO: Work on this
+-- import * from moduleA 
+-- import myFunc from moduleB
+-- import moduleC
+
+
+a = myFunc(4)
+b = functionFromA(5, 7)
+c = moduleC.myFuncFromC("hey")
