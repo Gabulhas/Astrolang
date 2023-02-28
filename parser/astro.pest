@@ -68,7 +68,7 @@ MapType = {"[" ~ Type ~ ":" ~ Type ~ "]"}
 FunctionType = {"[" ~ Type ~ ("->" ~ Type )+ ~ "]" }
 
 
-Type = { 
+Type = _{ 
 	SimpleType |
     TupleType  |
     ArrayType  |
@@ -79,12 +79,8 @@ Type = {
 StmtDefine = {  TypedVarList ~ ("=" ~ ExpList)? }
 StmtAssign = { VarList ~ "=" ~ ExpList }
 StmtFuncCall = { FunctionCall }
-StmtLabel = { "::" ~ Ident ~ "::" }
 StmtBreak = { "break" }
-StmtGoto = { "goto" ~ Ident }
-StmtDo = { "do" ~ Block ~ "end"}
 StmtWhile = { "while" ~ Exp ~ "do" ~ Block ~ "end" }
-StmtRepeat = { "repeat" ~ Block ~ "until" ~ Exp }
 StmtIf = { "if" ~ Exp ~ "then" ~ Block ~ ("elseif" ~ Exp ~ "then" ~ Block)* ~ ("else" ~ Block)? ~ "end" }
 StmtForIndex = { "for" ~ "(" ~ (StmtDefine | StmtAssign) ~ ";" ~ Exp ~ (";" ~ Exp)? ~")" ~"do" ~ Block ~ "end" }
 StmtForEach = { "for" ~ IdentList ~ "in" ~ ExpList ~ "do" ~ Block ~ "end" }
@@ -96,22 +92,17 @@ StmtDefineType = {
 }
 
 
-// TODO: maybe add something to differentiate functions from entry instructions
 StmtFuncDef = { ("function" | "instruction" ) ~ FuncName ~ FuncBody }
 
 StmtReturn = { "return" ~ (ExpList)? ~ (";")? }
 
-Stmt = {
+Stmt = _{
     ";" |
     StmtDefine |
     StmtAssign |
     StmtFuncCall |
-    StmtLabel |
     StmtBreak |
-    StmtGoto |
-    StmtDo |
     StmtWhile |
-    StmtRepeat |
     StmtIf |
     StmtForIndex |
     StmtForEach |
