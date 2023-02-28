@@ -1,10 +1,10 @@
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum IntegerSign {
     Signed,
     Unsigned,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum BitSize {
     B8,
     B16,
@@ -14,7 +14,7 @@ pub enum BitSize {
     Size,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PrimitiveType {
     Integer(IntegerSign, BitSize),
     Float(BitSize),
@@ -23,6 +23,7 @@ pub enum PrimitiveType {
     Unit,
 }
 
+#[derive(Debug, Clone)]
 pub enum Type {
     Primitive(PrimitiveType),
     Tuple(Vec<Type>),

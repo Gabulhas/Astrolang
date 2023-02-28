@@ -1,5 +1,9 @@
 use types::*;
 
+pub struct  Program {
+    contents: Block
+}
+
 pub enum FunctionBody {
     ParameterList(Vec<String>),
     Type(Type),
@@ -11,16 +15,39 @@ pub struct Block {
 }
 
 
-pub enum TableConstructor  {
-
+pub enum Field {
+    Square{key: Exp, exp: Exp},
+    Dot{key: String, exp: Exp},
+    Literal(Exp)
 }
 
-pub enum Var {
+pub struct  TableConstructor  {
+    fields: Vec<Field>
+}
 
+pub enum AtomicExp {
+    Ident(String),
+    Exp(Exp)
+}
+
+pub enum Index {
+    Square(Exp),
+    Dot(String)
+
+}
+pub enum VarAux {
+    Complex(Vec<Call>, Index), 
+    Simple(Index)
+}
+pub struct Var {
+    atomic_exp: AtomicExp,
+    rest: Vec<VarAux>
 }
 
 pub struct  FuncName {
-
+    name: String,
+    dot: Vec<String>,
+    colon: Option<String>
 }
 
 pub struct DefineStmt {
@@ -57,12 +84,16 @@ pub enum Statement {
     Return{explist: Vec<Exp>}
 }
 
+/*This might be removed, this allows 
+    potato(a)
+    potato {a=5}
+    potato a
+*/
+
 pub enum Call {
-
-}
-
-pub enum PrefixExp {
-    
+    ArgList(Vec<Exp>),
+    TableConstructor(TableConstructor),
+    LiteralString(String)
 }
 
 
