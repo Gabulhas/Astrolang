@@ -1,3 +1,4 @@
+pub mod type_parsing;
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum IntegerSign {
     Signed,
@@ -14,7 +15,7 @@ pub enum BitSize {
     Size,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrimitiveType {
     Integer(IntegerSign, BitSize),
     Float(BitSize),
