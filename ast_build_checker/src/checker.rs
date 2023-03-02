@@ -1,4 +1,4 @@
-use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value};
+use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall};
 use astroparser::Rule;
 use immutable_map::TreeMap;
 use pest::iterators::Pair;
@@ -114,7 +114,11 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: TreeMap<&str, Type>) -> Exp {
             }
         }
         Rule::Value => {
-            let known_type_of_value
+            let (value, value_type)  =  build_value(exp_pair, &known_types);
+            Exp {
+                contents: Box::new(astroast::ExpContent::Value(value)),
+                exptype: value_type
+            }
         }
 
         _ => panic!("Impossible Expression"),
@@ -161,6 +165,18 @@ fn build_function_body(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) 
     }
 }
 
-fn build_value(value_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (Type, Value) {
-    
+fn build_value(value_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (Value, Type) {
+    match value_pair.as_rule() {
+
+        Rule::FunctionCall => build_value
+    }
+}
+
+
+fn build_function_call(function_call_pair: Pair<Rule>,  known_types: &TreeMap<&str, Type>) -> FunctionCall {
+
+}
+
+fn build_var(var_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Var {
+
 }
