@@ -49,9 +49,3 @@ pub fn parse_simpletype(type_string: &str) -> Type {
 pub fn parse_type_pairs(type_pairs: Pairs<Rule>) -> Vec<Type> {
     type_pairs.map(parse_type).collect()
 }
-
-fn infer_from_text(text: &str) -> Type {
-    
-}
-
-

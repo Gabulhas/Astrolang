@@ -1,50 +1,70 @@
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 COMMENT = _{
-    CommentStart ~ LongBracketStart ~ StringContentLong ~ LongBracketEnd |
-    // CommentStart ~ PreprocessDirective |
-    CommentStart ~ SimpleCommentContent
+    CommentStart ~ LongBracketStart ~ StringContentLong ~ LongBracketEnd
+  | // CommentStart ~ PreprocessDirective |
+  CommentStart ~ SimpleCommentContent
 }
 
 keyword = _{
-    "and"   | "break" | "do"       | "elseif" | "else" | "end"    |
-    "false" | "for  " | "function" | "goto"   | "if"   | "in"     |
-    "local" | "nil"   | "not"      | "or"   | "repeat" | "return" |
-    "then"  | "true"  | "until"    | "while" | "let"
+    "and"
+  | "break"
+  | "do"
+  | "elseif"
+  | "else"
+  | "end"
+  | "false"
+  | "for  "
+  | "function"
+  | "goto"
+  | "if"
+  | "in"
+  | "local"
+  | "nil"
+  | "not"
+  | "or"
+  | "repeat"
+  | "return"
+  | "then"
+  | "true"
+  | "until"
+  | "while"
+  | "let"
 }
 
-CommentStart = _{ "--" }
-LongBracketContent = _{ "="* }
-LongBracketStart = _{ "[" ~ PUSH(LongBracketContent) ~ "[" }
-LongBracketEnd = _{ "]" ~ POP ~ "]" }
-LongBracketEndPeek = _{ "]" ~ PEEK ~ "]" }
+CommentStart         = _{ "--" }
+LongBracketContent   = _{ "="* }
+LongBracketStart     = _{ "[" ~ PUSH(LongBracketContent) ~ "[" }
+LongBracketEnd       = _{ "]" ~ POP ~ "]" }
+LongBracketEndPeek   = _{ "]" ~ PEEK ~ "]" }
 SimpleCommentContent = { (!("\n") ~ ANY)* }
-StringContentLong = { (!(LongBracketEndPeek) ~ ANY)* }
+StringContentLong    = { (!(LongBracketEndPeek) ~ ANY)* }
 
 Ident = @{
     !(ASCII_DIGIT | WHITESPACE) ~ !(keyword ~ (!ASCII_ALPHA ~ ANY)) ~ (!(WHITESPACE) ~ (ASCII_ALPHA | "_" | ASCII_DIGIT))+
 }
 
 DecimalExponent = @{ (^"e" ~ ("-" | "+")? ~ ASCII_DIGIT+) }
-BinaryExponent = @{ (^"p" ~ ("-" | "+")? ~ ASCII_HEX_DIGIT+) }
+BinaryExponent  = @{ (^"p" ~ ("-" | "+")? ~ ASCII_HEX_DIGIT+) }
 
-NumberNormal = {ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)?}
-NumberFractionalOnly = {"." ~ ASCII_DIGIT+}
+NumberNormal         = { ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? }
+NumberFractionalOnly = { "." ~ ASCII_DIGIT+ }
 
-HexNormal = {ASCII_HEX_DIGIT+ ~ ("." ~ ASCII_HEX_DIGIT*)?}
-HexFractionalOnly = {"." ~ ASCII_HEX_DIGIT+}
+HexNormal         = { ASCII_HEX_DIGIT+ ~ ("." ~ ASCII_HEX_DIGIT*)? }
+HexFractionalOnly = { "." ~ ASCII_HEX_DIGIT+ }
 
 LiteralNumberDec = @{ ("-")? ~ (NumberNormal | NumberFractionalOnly) ~ DecimalExponent? }
 LiteralNumberHex = @{ ("-")? ~ "0" ~ ^"x" ~ (HexNormal | HexFractionalOnly) ~ (DecimalExponent | BinaryExponent)? }
 
 LiteralNumber = _{
-    LiteralNumberHex | LiteralNumberDec
+    LiteralNumberHex
+  | LiteralNumberDec
 }
 
 LiteralString = ${
-    "'" ~ StringContentSQ ~ "'" |
-    "\"" ~ StringContentDQ ~ "\"" |
-    LongBracketStart ~ StringContentLong ~ LongBracketEnd
+    "'" ~ StringContentSQ ~ "'"
+  | "\"" ~ StringContentDQ ~ "\""
+  | LongBracketStart ~ StringContentLong ~ LongBracketEnd
 }
 
 StringEscape = @{ "\\" ~ ANY }
@@ -52,85 +72,80 @@ StringEscape = @{ "\\" ~ ANY }
 StringContentSQ = @{ (!("\'" | "\\") ~ ANY)* ~ (StringEscape ~ StringContentSQ)? }
 StringContentDQ = @{ (!("\"" | "\\") ~ ANY)* ~ (StringEscape ~ StringContentDQ)? }
 
-LiteralNil = { "nil" }
+LiteralNil   = { "nil" }
 LiteralFalse = { "false" }
-LiteralTrue = { "true" }
+LiteralTrue  = { "true" }
 
+Chunk = { SOI ~ Block ~ EOI }
+Block = { Stmt* ~ StmtReturn? }
 
-Chunk = {SOI ~ Block ~ EOI}
-Block = {Stmt* ~ StmtReturn?}
+// TODO: add more stuff with types
+SimpleType   = @{ Ident }
+TupleType    = { "(" ~ Type ~ ("*" ~ Type)+ ~ ")" }
+ArrayType    = { "[" ~ Type ~ "]" }
+MapType      = { "[" ~ Type ~ ":" ~ Type ~ "]" }
+FunctionType = { "[" ~ Type ~ ("->" ~ Type)+ ~ "]" }
 
-//TODO: add more stuff with types
-SimpleType = @{ Ident }
-TupleType = { "(" ~ Type ~ ("*" ~ Type )+ ~")"}
-ArrayType = {"[" ~ Type ~ "]"}
-MapType = {"[" ~ Type ~ ":" ~ Type ~ "]"}
-FunctionType = {"[" ~ Type ~ ("->" ~ Type )+ ~ "]" }
-
-
-Type = _{ 
-	SimpleType |
-    TupleType  |
-    ArrayType  |
-    MapType    |
-    FunctionType
+Type = _{
+    SimpleType
+  | TupleType
+  | ArrayType
+  | MapType
+  | FunctionType
 }
 
-StmtDefine = {  TypedVarList ~ ("=" ~ ExpList)? }
-StmtAssign = { VarList ~ "=" ~ ExpList }
-StmtFuncCall = { FunctionCall }
-StmtBreak = { "break" }
-StmtWhile = { "while" ~ Exp ~ "do" ~ Block ~ "end" }
-StmtIf = { "if" ~ Exp ~ "then" ~ Block ~ ("elseif" ~ Exp ~ "then" ~ Block)* ~ ("else" ~ Block)? ~ "end" }
-StmtForIndex = { "for" ~ "(" ~ (StmtDefine | StmtAssign) ~ ";" ~ Exp ~ (";" ~ Exp)? ~")" ~"do" ~ Block ~ "end" }
-StmtForEach = { "for" ~ IdentList ~ "in" ~ ExpList ~ "do" ~ Block ~ "end" }
-StmtImport = {"import" ~ (Ident | ImportIdentList ~ "from" ~ ImportIdentList)}
+StmtDefine     = { TypedVarList ~ ("=" ~ ExpList)? }
+StmtAssign     = { VarList ~ "=" ~ ExpList }
+StmtFuncCall   = { FunctionCall }
+StmtBreak      = { "break" }
+StmtWhile      = { "while" ~ Exp ~ "do" ~ Block ~ "end" }
+StmtIf         = { "if" ~ Exp ~ "then" ~ Block ~ ("elseif" ~ Exp ~ "then" ~ Block)* ~ ("else" ~ Block)? ~ "end" }
+StmtForIndex   = { "for" ~ "(" ~ (StmtDefine | StmtAssign) ~ ";" ~ Exp ~ (";" ~ Exp)? ~ ")" ~ "do" ~ Block ~ "end" }
+StmtForEach    = { "for" ~ IdentList ~ "in" ~ ExpList ~ "do" ~ Block ~ "end" }
+StmtImport     = { "import" ~ (Ident | ImportIdentList ~ "from" ~ ImportIdentList) }
 StmtDefineType = {
-	("struct" | "context" | "state" | "record") ~ Ident ~
-    (Ident ~ ":" ~ Type ~ ",")+ ~
-	"end"
+    ("struct" | "context" | "state" | "record") ~ Ident ~ (Ident ~ ":" ~ Type ~ ",")+ ~ "end"
 }
 
-
-StmtFuncDef = { ("function" | "instruction" ) ~ FuncName ~ FuncBody }
+StmtFuncDef = { ("function" | "instruction") ~ FuncName ~ FuncBody }
 
 StmtReturn = { "return" ~ (ExpList)? ~ (";")? }
 
 Stmt = _{
-    ";" |
-    StmtDefine |
-    StmtAssign |
-    StmtFuncCall |
-    StmtBreak |
-    StmtWhile |
-    StmtIf |
-    StmtForIndex |
-    StmtForEach |
-    StmtFuncDef |
-    StmtDefineType |
-    StmtImport
+    ";"
+  | StmtDefine
+  | StmtAssign
+  | StmtFuncCall
+  | StmtBreak
+  | StmtWhile
+  | StmtIf
+  | StmtForIndex
+  | StmtForEach
+  | StmtFuncDef
+  | StmtDefineType
+  | StmtImport
 }
 
-FuncDot = {"." ~ Ident} 
-FuncColon = {":" ~ Ident} 
+FuncDot   = { "." ~ Ident }
+FuncColon = { ":" ~ Ident }
 
-FuncName = { Ident ~ FuncDot* ~ FuncColon? }
+FuncName  = { Ident ~ FuncDot* ~ FuncColon? }
 IdentList = { Ident ~ ":" ~ Type ~ ("," ~ Ident ~ ":" ~ Type)* }
-ExpList = { Exp ~ ("," ~ Exp)* }
+ExpList   = { Exp ~ ("," ~ Exp)* }
 
 VarArg = { "..." }
 
 ExpAtom = _{
-    LiteralNil |
-    LiteralTrue |
-    LiteralFalse |
-    LiteralNumber |
-    LiteralString |
-    VarArg |
-    AnonFuncDef |
-    Value |
-    TableConstructor |
-    UnaryOpExp 
+    LiteralNil
+  | LiteralTrue
+  | LiteralFalse
+  | LiteralNumber
+  | LiteralString
+  | VarArg
+  | AnonFuncDef
+  | Value
+  | TableConstructor
+  | UnaryOpExp
 }
 
 UnaryOpExp = {
@@ -145,38 +160,35 @@ TupleExp = {
     "(" ~ Exp ~ ("," ~ Exp)+ ~ ")"
 }
 
-Exp = { 
-    BinaryOpExp |
-    ExpAtom | 
-    TupleExp
+Exp = _{
+    BinaryOpExp
+  | ExpAtom
+  | TupleExp
 }
 
 AtomicExp = {
-    Ident |
-    "(" ~ Exp ~ ")"
+    Ident
+  | "(" ~ Exp ~ ")"
 }
 
 Index = {
-    "[" ~ Exp ~ "]" |
-    "." ~ Ident
+    "[" ~ Exp ~ "]"
+  | "." ~ Ident
 }
 
-SimpleCall = { Args }
+SimpleCall = _{ Args }
 
-Call = {
+Call = _{
     SimpleCall
 }
 
 Var = {
-    AtomicExp ~ (
-        Call* ~ Index |
-        Index
-    )*
+    AtomicExp ~ (Call* ~ Index | Index)*
 }
 
 Value = {
-    FunctionCall |
-    Var
+    FunctionCall
+  | Var
 }
 
 FunctionCall = {
@@ -189,38 +201,39 @@ AnonFuncDef = { ("function" | "fn") ~ FuncBody }
 
 FuncBody = { "(" ~ ParList? ~ ")" ~ ("->" ~ Type)? ~ Block ~ "end" }
 
-ParList = { IdentList ~ ("," ~ "...")? | "..." }
-VarList = { Var ~ ("," ~ Var)* }
-TypedVarList = { Ident ~":" ~ Type ~ ("," ~ Ident ~":" ~ Type)*}
+ParList          = { IdentList ~ ("," ~ "...")? | "..." }
+VarList          = { Var ~ ("," ~ Var)* }
+TypedVarList     = { Ident ~ ":" ~ Type ~ ("," ~ Ident ~ ":" ~ Type)* }
 TableConstructor = { "{" ~ (FieldList)* ~ "}" }
 
 FieldList = { Field ~ (FieldSep ~ Field)* ~ FieldSep? }
 
-Field = { "[" ~ Exp ~ "]" ~ "=" ~ Exp | Ident ~ "=" ~ Exp | Exp}
-ImportIdentList = {"*" | Ident ~ ("," ~ Ident)* }
+//This is used for tables/composite types
+Field           = { "[" ~ Exp ~ "]" ~ "=" ~ Exp | Ident ~ "=" ~ Exp | Exp }
+ImportIdentList = { "*" | Ident ~ ("," ~ Ident)* }
 
 FieldSep = { "," | ";" }
-UnaryOp = { "-" | "not" | "#" | (!("~=") ~ "~") }
-BinaryOp = { 
-    ">>" |
-    "<<" |
-    "<=" |
-    ">=" |
-    "==" |
-    "~=" |
-    "//" |
-    "+" |
-    "-" |
-    "*" |
-    "/" |
-    "^" |
-    "%" |
-
-    "&" |
-    "~" |
-    "|" |
-    ".." |
-    "<" |
-    ">" |
-    "and" |
-    "or" }
+UnaryOp  = { "-" | "not" | "#" | (!("~=") ~ "~") }
+BinaryOp = {
+    ">>"
+  | "<<"
+  | "<="
+  | ">="
+  | "=="
+  | "~="
+  | "//"
+  | "+"
+  | "-"
+  | "*"
+  | "/"
+  | "^"
+  | "%"
+  | "&"
+  | "~"
+  | "|"
+  | ".."
+  | "<"
+  | ">"
+  | "and"
+  | "or"
+}

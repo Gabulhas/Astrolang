@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 astroparser = {path = "../parser"}
+astrotypechecker = {path ="../ast_build_checker"}
 pest = "2.5.5"
 pest_derive = "2.5.5"
+immutable-map = "0.1.2"
