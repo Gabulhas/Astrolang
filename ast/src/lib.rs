@@ -77,12 +77,6 @@ pub struct DefineStmt {
 }
 
 #[derive(Debug)]
-pub enum ForIndexElement {
-    AssignStmt(AssignStmt),
-    DefineStmt(DefineStmt),
-}
-
-#[derive(Debug)]
 pub struct AssignStmt {
     pub var: Var,
     pub exp: Exp,
@@ -121,7 +115,7 @@ pub enum Statement {
         else_block: Option<Block>,
     },
     ForIndex {
-        starting_value: DefineTypeVariant,
+        starting_value: Box<DefineStmt>,
         condition: Exp,
         exp: Option<Exp>,
         block: Box<Block>,

@@ -199,8 +199,11 @@ fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statem
     let mut known_types = known_types.clone();
     let define_type_variant = match assign_or_define.as_rule() {
         Rule::StmtAssign => {
-            let assign = build_stmtassign(assign_or_define, &known_types)
-            ForIndexElement::AssignStmt(build_stmtassign)
+            let assign = build_stmtassign(assign_or_define, &known_types);
+            if assign.len() != 1 {
+                panic!("More than one assignment in for");
+            }
+            assign.first()
         }
         Rule::StmtDefine => {
             let (define, new_known_types) = build_stmtdefine(stmt, &known_types);
@@ -208,12 +211,13 @@ fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statem
                 panic!("More than one definition in for");
             }
             let define_stmt = match define.first().unwrap() {
-                Statement::Define(a)  => a,
+                Statement::Define(a)  => a.clone().to_owned(),
                 _ => panic!("Impossible")
 
             };
             ForIndexElement::DefineStmt(define_stmt.clone())
         }
+        _ => panic!("Impossible Statement in For")
     };
 
 
@@ -228,9 +232,23 @@ fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statem
         _ => panic!("Impossible For element")
     };
 
-
-
+    Statement::ForIndex { starting_value: define_type_variant, condition, exp: lastexp_opt, block: Box::new(forblock) }
     
+}
+
+fn build_foreach(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statement{
+    let mut inners = stmt.into_inner();
+    let identlist = inners.next().unwrap().into_inner().map(|f| f.as_str().to_string()).collect();
+    let explist = inners.next().unwrap().into_inner().map(|f| build_exp(f, known_types)).collect();
+    let block = build_block(inners.next().unwrap(), known_types) ;
+    Statement::ForEach { variable_names: identlist, expression_list: explist, block:Box::new(block) }
+}
+
+fn build_define_type(stmt: Pair<Rule>, known_types: TreeMap<&str, Type>) -> (Statement, TreeMap<&'a str, Type>)  {
+    let mut inners = stmt.into_inner();
+    //TODO: add other variants
+    let name = inners.next().unwrap().to_string(); 
+    l
 }
 
 fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
