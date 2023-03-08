@@ -46,7 +46,8 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     //It's a list of every type defined, even if the type is composite aswell
     Composite(Composite),
-    Undefined
+    Undefined,
+    UndefinedNumber
 }
 
 pub fn integer_type(sign: IntegerSign, bitsize: BitSize) -> Type{
@@ -55,6 +56,11 @@ pub fn integer_type(sign: IntegerSign, bitsize: BitSize) -> Type{
 
 pub fn undefined_integer() -> Type {
     integer_type(IntegerSign::Undefined, BitSize::Undefined)
+}
+
+pub fn undefined_number() -> Type {
+    Type::UndefinedNumber
+
 }
 
 pub fn float_type(bitsize: BitSize) -> Type {

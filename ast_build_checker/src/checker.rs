@@ -1,11 +1,11 @@
-use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign};
+use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign, ForIndexElement};
 use astroparser::Rule;
 use immutable_map::TreeMap;
 use pest::iterators::Pair;
 use types::type_parsing::parse_type;
 use types::{
     array_type, boolean_type, char_type, integer_type, same_type, BitSize, IntegerSign,
-    PrimitiveType, Type, undefined_integer, undefined_type
+    PrimitiveType, Type, undefined_integer, undefined_type, undefined_number
 };
 
 pub fn build_program_ast(program: Pair<Rule>, known_types: TreeMap<&str, Type>) -> Program {
@@ -23,10 +23,39 @@ pub fn build_program_ast(program: Pair<Rule>, known_types: TreeMap<&str, Type>) 
 fn build_block(block: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Block {
     assert!(block.as_rule() == Rule::Block);
     // Block is just a list of STMT + STMTReturn?
-    let result_statement = Vec::new();
+    let mut result_statement = Vec::new();
+    let mut known_types = known_types.clone();
     for statement in block.into_inner() {
         match statement.as_rule() {
-            Rule::StmtDefine => build_stmtdefine(statement, known_types),
+            Rule::StmtDefine => {
+                let (new_stmt, new_known_types) =  build_stmtdefine(statement, &known_types);
+                known_types = new_known_types;
+                for stmt in new_stmt {
+                    result_statement.push(stmt);
+                }
+            }
+            Rule::StmtAssign => {
+                let new_stmt = build_stmtassign(statement, &known_types);
+                for stmt in new_stmt {
+                    result_statement.push(stmt)
+                }
+            }
+            Rule::StmtFuncCall => {
+                let new_stmt = build_function_call(statement, &known_types);
+                result_statement.push(Statement::FunctionCall(new_stmt))
+            }
+            Rule::StmtBreak => {
+                result_statement.push(Statement::Break)
+            }
+            Rule::StmtWhile => {
+                result_statement.push(build_stmtwhile(statement, &known_types))
+            }
+            Rule::StmtIf => {
+                result_statement.push(build_stmtif(statement, &known_types))
+            }
+            Rule::StmtForIndex {
+
+            }
             _ => panic!("Impossible statement"),
         };
     }
@@ -83,6 +112,127 @@ fn build_stmtdefine<'a>(
     (result_definitions, known_types)
 }
 
+
+fn build_stmtassign(
+    stmt: Pair<Rule>,
+    known_types: &TreeMap<& str, Type>,
+) -> Vec<Statement> {
+    let mut assignments_and_exps = stmt.into_inner();
+    let mut assignments = assignments_and_exps.next().unwrap().into_inner();
+    let mut exps = assignments_and_exps.next().unwrap().into_inner();
+    // This is used to check if the order of the types are correct
+    let mut result_assignments = Vec::new();
+
+
+    while let Some(var_pair) = assignments.next() {
+        if let Some(exp_pair) = exps.next() {
+            let var = build_var(var_pair, &known_types);
+            let exp = build_exp(exp_pair, &known_types);
+            if same_type(&var.vartype, &exp.exptype) {
+                result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
+            } else {
+                // Add something to infer types, or maybe not, idk
+                panic!("Var type doens't match the Exp type")
+            }
+
+
+        } else {
+            panic!("Non matching exp")
+        }
+    }
+    result_assignments
+
+}
+fn build_stmtwhile (
+    stmt: Pair<Rule>,
+    known_types: &TreeMap<& str, Type>,
+) -> Statement {
+        let mut inners = stmt.into_inner();
+        let exp = build_exp(inners.next().unwrap(), &known_types);
+        if same_type(&exp.exptype, &boolean_type()) {
+            let block = build_block(inners.next().unwrap(), &known_types);
+            Statement::While { condition: exp, block: Box::new(block) }
+        } else {
+            panic!("While statement has a non-boolean expression")
+        }
+}
+
+fn build_stmtif (
+    stmt: Pair<Rule>,
+    known_types: &TreeMap<& str, Type>,
+) -> Statement {
+    let mut inners = stmt.into_inner();
+    let if_exp = build_exp(inners.next().unwrap(), &known_types);
+
+    if same_type(&if_exp.exptype, &boolean_type()) {
+        let block = build_block(inners.next().unwrap(), &known_types);
+        let mut elseifs = Vec::new();
+        let mut else_block = None;
+        while let Some(elif_or_elseblock_pair) = inners.next() {
+            //since the parser checks stuff, we don't need to check if we reached the end or not
+            match elif_or_elseblock_pair.as_rule() {
+                Rule::Block => else_block = Some(build_block(elif_or_elseblock_pair, &known_types)),
+                Rule::Exp => {
+                    let elif_exp = build_exp(elif_or_elseblock_pair, &known_types);
+                    if same_type(&elif_exp.exptype, &boolean_type()) {
+                        let elif_block = build_block(inners.next().unwrap(), &known_types);
+                        elseifs.push((elif_exp, elif_block))
+                    } else {
+                        panic!("Elif expression isn't a boolean")
+                    }
+                }
+                _ => panic!("Impossible if section")
+            }
+
+        }
+        Statement::If { condition: if_exp, then_block: Box::new(block), elseifs, else_block }
+
+    } else {
+        panic!("While statement has a non-boolean expression")
+    }
+
+}
+
+fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statement{
+    let mut inners = stmt.into_inner();
+    let assign_or_define = inners.next().unwrap();
+    let mut known_types = known_types.clone();
+    let define_type_variant = match assign_or_define.as_rule() {
+        Rule::StmtAssign => {
+            let assign = build_stmtassign(assign_or_define, &known_types)
+            ForIndexElement::AssignStmt(build_stmtassign)
+        }
+        Rule::StmtDefine => {
+            let (define, new_known_types) = build_stmtdefine(stmt, &known_types);
+            if define.len() != 1 {
+                panic!("More than one definition in for");
+            }
+            let define_stmt = match define.first().unwrap() {
+                Statement::Define(a)  => a,
+                _ => panic!("Impossible")
+
+            };
+            ForIndexElement::DefineStmt(define_stmt.clone())
+        }
+    };
+
+
+    let condition = build_exp(inners.next().unwrap(), &known_types);
+    if !same_type(&condition.exptype, &boolean_type()) {
+        panic!("For Index condition is not a boolean") 
+    }
+    let lastexp_or_block = inners.next().unwrap();
+    let (lastexp_opt, forblock) = match lastexp_or_block.as_rule() {
+        Rule::Exp => (Some(build_exp(lastexp_or_block, &known_types)), build_block(inners.next().unwrap(), &known_types)),
+        Rule::Block =>  (None,build_block(lastexp_or_block, &known_types)),
+        _ => panic!("Impossible For element")
+    };
+
+
+
+    
+}
+
 fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
     match unary_op_str {
         "-" =>   (UnopSign::Neg, undefined_integer()),
@@ -97,27 +247,29 @@ fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
 // the sign, the left and right types, and the return type
 fn get_binary_op(binary_op_str: &str) -> (BinopSign, Type, Type) {
     match binary_op_str {
-        ">>"  => (DoubleGreat, undefined_integer(), undefined_integer()),
-        "<<"  => (DoubleLess, undefined_integer(), undefined_integer()),
-        "<="  => (LessEquals, undefined_integer(), boolean_type())
-        ">="  => (GreaterEquals, undefined_integer(), boolean_type())
-        "=="  => (Equals, 
-        "~="  => (Different,
-        "//"  => (DoubleSlash,
-        "+"   => (Plus,
-        "-"   => (Minus,
-        "*"   => (Mult,
-        "/"   => (SingleSlash,
-        "^"   => (Carrot,
-        "%"   => (Percentile,
-        "&"   => (Appersand,
-        "~"   => (Tilda,
-        "|"   => (Bar,
-        ".."  => (DoubleDot,
-        "<"   => (Less,
-        ">"   => (Greater,
-        "and" => (And,
-        "or"  => (Or,
+        ">>"  => (BinopSign::DoubleGreat, undefined_integer(), undefined_integer()),
+        "<<"  => (BinopSign::DoubleLess, undefined_integer(), undefined_integer()),
+        "<="  => (BinopSign::LessEquals, undefined_integer(), boolean_type()),
+        ">="  => (BinopSign::GreaterEquals, undefined_integer(), boolean_type()),
+        "=="  => (BinopSign::Equals, undefined_type(), boolean_type()),
+        "~="  => (BinopSign::Different,undefined_type(), boolean_type()),
+        "//"  => (BinopSign::DoubleSlash, undefined_integer(), undefined_integer()),
+        "+"   => (BinopSign::Plus, undefined_number(), undefined_number()),
+        "-"   => (BinopSign::Minus,undefined_number(), undefined_number()),
+        "*"   => (BinopSign::Mult,undefined_number(), undefined_number()),
+        "/"   => (BinopSign::SingleSlash,undefined_number(), undefined_number()),
+        "^"   => (BinopSign::Carrot,undefined_number(), undefined_number()),
+        "%"   => (BinopSign::Percentile,undefined_number(), undefined_number()),
+        "&"   => (BinopSign::Appersand, boolean_type(), boolean_type()),
+        "~"   => (BinopSign::Tilda, boolean_type(), boolean_type()),
+        "|"   => (BinopSign::Bar, boolean_type(), boolean_type()),
+        ".."  => (BinopSign::DoubleDot, undefined_type(), undefined_type()),
+        "<"   => (BinopSign::Less, undefined_number(), undefined_number()),
+        ">"   => (BinopSign::Greater, undefined_number(), undefined_number()),
+        "and" => (BinopSign::And, boolean_type(), boolean_type()),
+        "or"  => (BinopSign::Or, boolean_type(), boolean_type()),
+        _ => panic!("Impossible binary op str")
+
     }
 
 }
@@ -153,16 +305,6 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
                 panic!("Non matching sign and exp")
             }
              
-        }
-
-        Rule::BinaryOpExp {
-            let mut inners = exp_pair.into_inner();
-            let first = inners.next().unwrap();
-
-
-
-
-
         }
 
         Rule::TupleExp => {
@@ -276,7 +418,6 @@ fn build_var(var_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Var {
             } 
             Rule::Index => {
                 if let Type::Composite(_) = previous_type {
-
                     let (indexed, attribute_type) = build_index(varaux, known_types, &previous_type);
                     var_calls_and_indexes.push(VarAux::Index(indexed));
                     previous_type = attribute_type;
@@ -354,9 +495,7 @@ fn build_atomic_exp(atomic_exp: Pair<Rule>, known_types: &TreeMap<&str, Type>) -
         Rule::Ident => {
             let known_type = match known_types.get(atomic_exp.as_str()) {
                 Some(t) => t,
-                None => panic!("Undefined ident {}", atomic_exp.as_str())
-
-
+                None => &Type::Undefined,
             };
             (AtomicExp::Ident(atomic_exp.to_string()), known_type.clone())
         }
@@ -461,15 +600,15 @@ fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: 
         ExpContent::AnonFuncDef(_) => panic!("Not implemented yet"),
         ExpContent::TableConstructor(_) => panic!("Not implemented yet"),
         ExpContent::Tuple(_) => panic!("Not implemented yet"),
-        ExpContent::Binop { left, sign, right } => {
-            let new_left = update_integer_recursively(previous_integer, new_integer, left);
-            let new_right = update_integer_recursively(previous_integer, new_integer, right);
-            ExpContent::Binop {
-                left: new_left,
-                sign,
-                right: new_right,
-            }
-        }
+        //ExpContent::Binop { left, sign, right } => {
+        //    let new_left = update_integer_recursively(previous_integer, new_integer, left);
+        //    let new_right = update_integer_recursively(previous_integer, new_integer, right);
+        //    ExpContent::Binop {
+        //        left: new_left,
+        //        sign,
+        //        right: new_right,
+        //    }
+        //}
         _ => exp_contents,
     };
     Exp {

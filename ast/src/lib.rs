@@ -1,51 +1,61 @@
 use types::*;
 
+#[derive(Debug)]
 pub struct Program {
     pub contents: Block,
 }
 
+#[derive(Debug)]
 pub struct FunctionBody {
     pub parameter_list: Vec<String>,
     pub function_type: Type,
     pub block: Block,
 }
 
+#[derive(Debug)]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
+#[derive(Debug)]
 pub enum Field {
     Square { key: Exp, exp: Exp },
     Dot { key: String, exp: Exp },
     Literal(Exp),
 }
 
+#[derive(Debug)]
 pub struct FunctionCall {
     pub var: Var,
     pub call: Vec<Call>,
     pub calltype: Type
 }
 
+#[derive(Debug)]
 pub struct TableConstructor {
     pub fields: Vec<Field>,
 }
 
+#[derive(Debug)]
 pub enum AtomicExp {
     Ident(String),
     Exp(Exp),
 }
 
 //This is for indexing a value, like a.potato, or a["key"], or a[4]
+#[derive(Debug)]
 pub enum Index {
     Square(Exp),
     Dot(String),
 }
 
+#[derive(Debug)]
 pub enum VarAux {
     Call(Call),
     Index(Index),
 }
 
+#[derive(Debug)]
 pub struct Var {
     pub atomic_exp: AtomicExp,
     pub rest: Vec<VarAux>,
@@ -53,22 +63,32 @@ pub struct Var {
     pub vartype: Type,
 }
 
+#[derive(Debug)]
 pub struct FuncName {
     pub name: String,
     pub dot: Vec<String>,
     pub colon: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct DefineStmt {
     pub var: String,
     pub exp: Option<Exp>,
 }
 
+#[derive(Debug)]
+pub enum ForIndexElement {
+    AssignStmt(AssignStmt),
+    DefineStmt(DefineStmt),
+}
+
+#[derive(Debug)]
 pub struct AssignStmt {
     pub var: Var,
     pub exp: Exp,
 }
 
+#[derive(Debug)]
 pub enum DefineTypeVariant {
     Struct,
     Context,
@@ -76,11 +96,15 @@ pub enum DefineTypeVariant {
     Record,
 }
 
+#[derive(Debug)]
 pub enum FunctionVariant {
     Function,
     Instruction,
 }
 
+
+
+#[derive(Debug)]
 pub enum Statement {
     Define(DefineStmt),
     Assign(AssignStmt),
@@ -94,14 +118,18 @@ pub enum Statement {
         condition: Exp,
         then_block: Box<Block>,
         elseifs: Vec<(Exp, Block)>,
-        else_block: Box<Block>,
+        else_block: Option<Block>,
     },
     ForIndex {
-        define: Option<DefineStmt>,
-        stmt: Option<AssignStmt>,
+        starting_value: DefineTypeVariant,
         condition: Exp,
         exp: Option<Exp>,
         block: Box<Block>,
+    },
+    ForEach {
+        variable_names: Vec<String>,
+        expression_list: Vec<Exp>,
+        block: Box<Block>
     },
     DefineType {
         variant: DefineTypeVariant,
@@ -124,22 +152,26 @@ pub enum Statement {
     potato a
 */
 
+#[derive(Debug)]
 pub enum Call {
     ArgList(Vec<Exp>),
     TableConstructor(TableConstructor),
     LiteralString(String),
 }
 
+#[derive(Debug)]
 pub enum Value {
     FunctionCall(FunctionCall),
     Var(Var),
 }
 
+#[derive(Debug)]
 pub struct Exp {
     pub contents: Box<ExpContent>,
     pub exptype: Type,
 }
 
+#[derive(Debug)]
 pub enum ExpContent {
     Nil,
     False,
@@ -161,6 +193,7 @@ pub enum ExpContent {
     Tuple(Vec<Exp>),
 }
 
+#[derive(Debug)]
 pub enum BinopSign {
     DoubleGreat,
     DoubleLess,
@@ -185,6 +218,7 @@ pub enum BinopSign {
     Or,
 }
 
+#[derive(Debug)]
 pub enum UnopSign {
     Hash, //#
     Neg,  //-
