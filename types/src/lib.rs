@@ -32,7 +32,7 @@ pub enum PrimitiveType {
 
 #[derive(Debug, Clone)]
 pub struct Composite {
-    pub name: String,
+    pub name: Option<String>,
     pub types: HashMap<String, Type>,
 }
 

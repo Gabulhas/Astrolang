@@ -1,11 +1,13 @@
-use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign, ForIndexElement};
+use std::collections::HashMap;
+
+use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign};
 use astroparser::Rule;
 use immutable_map::TreeMap;
 use pest::iterators::Pair;
 use types::type_parsing::parse_type;
 use types::{
     array_type, boolean_type, char_type, integer_type, same_type, BitSize, IntegerSign,
-    PrimitiveType, Type, undefined_integer, undefined_type, undefined_number
+    PrimitiveType, Type, undefined_integer, undefined_type, undefined_number, Composite
 };
 
 pub fn build_program_ast(program: Pair<Rule>, known_types: TreeMap<&str, Type>) -> Program {
@@ -244,11 +246,33 @@ fn build_foreach(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Stateme
     Statement::ForEach { variable_names: identlist, expression_list: explist, block:Box::new(block) }
 }
 
-fn build_define_type(stmt: Pair<Rule>, known_types: TreeMap<&str, Type>) -> (Statement, TreeMap<&'a str, Type>)  {
+fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Type>) -> (Statement, TreeMap<&'a str, Type>)  {
     let mut inners = stmt.into_inner();
+    let mut known_types = known_types.clone();
     //TODO: add other variants
     let name = inners.next().unwrap().to_string(); 
-    l
+    //This is for the stmt
+    let mut type_definitions = Vec::new();
+    //This is for the type
+    let mut types = HashMap::new();
+    while let Some(attribute_name) = inners.next() {
+        if let Some(attribute_type) = inners.next() {
+            let new_type = parse_type(attribute_type);
+            types.insert(attribute_name.to_string(), new_type);
+
+             
+        } else {
+            panic!("Impossible attribute type")
+        }
+    }
+
+    //TODO: do something for defined types, not for known types of variables
+    known_types.insert(&name, Type::Composite(Composite{name: Some(name), types}));
+    //change variant later
+    (Statement::DefineType { variant: astroast::DefineTypeVariant::Struct, name, type_definitions }, known_types)
+
+    // Adicionar novo tipo à known_types
+
 }
 
 fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
