@@ -1,3 +1,4 @@
+use std::fmt;
 use types::*;
 
 #[derive(Debug)]
@@ -70,6 +71,22 @@ pub struct FuncName {
     pub colon: Option<String>,
 }
 
+impl fmt::Display for FuncName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut result = self.name.clone();
+
+        for dot_str in &self.dot {
+            result.push_str(&format!(".{}", dot_str));
+        }
+
+        if let Some(colon_str) = &self.colon {
+            result.push_str(&format!(":{}", colon_str));
+        }
+
+        write!(f, "{}", result)
+    }
+}
+
 #[derive(Debug)]
 pub struct DefineStmt {
     pub var: String,
@@ -115,7 +132,7 @@ pub enum Statement {
         else_block: Option<Block>,
     },
     ForIndex {
-        starting_value: Box<DefineStmt>,
+        starting_value: Box<Statement>,
         condition: Exp,
         exp: Option<Exp>,
         block: Box<Block>,

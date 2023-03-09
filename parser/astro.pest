@@ -56,7 +56,8 @@ HexFractionalOnly = { "." ~ ASCII_HEX_DIGIT+ }
 LiteralNumberDec = @{ ("-")? ~ (NumberNormal | NumberFractionalOnly) ~ DecimalExponent? }
 LiteralNumberHex = @{ ("-")? ~ "0" ~ ^"x" ~ (HexNormal | HexFractionalOnly) ~ (DecimalExponent | BinaryExponent)? }
 
-LiteralNumber = _{
+//LiteralNumber = _{
+LiteralNumber = {
     LiteralNumberHex
   | LiteralNumberDec
 }

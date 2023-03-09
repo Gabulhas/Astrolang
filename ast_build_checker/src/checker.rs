@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign};
+use astroast::{Block, DefineStmt, Exp, FunctionBody, Program, Statement, Value, FunctionCall, Index, AtomicExp, Var, VarAux, Call, ExpContent, UnopSign, BinopSign, FunctionVariant, FuncName};
 use astroparser::Rule;
 use immutable_map::TreeMap;
 use pest::iterators::Pair;
@@ -42,21 +42,27 @@ fn build_block(block: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Block {
                     result_statement.push(stmt)
                 }
             }
-            Rule::StmtFuncCall => {
-                let new_stmt = build_function_call(statement, &known_types);
-                result_statement.push(Statement::FunctionCall(new_stmt))
+            Rule::StmtFuncCall => 
+                result_statement.push(Statement::FunctionCall(build_function_call(statement, &known_types))),
+            Rule::StmtBreak => 
+                result_statement.push(Statement::Break),
+            Rule::StmtWhile => 
+                result_statement.push(build_stmtwhile(statement, &known_types)),
+            Rule::StmtIf => 
+                result_statement.push(build_stmtif(statement, &known_types)),
+            Rule::StmtForIndex => 
+                result_statement.push(build_forindex(statement, &known_types)),
+            Rule::StmtForEach =>
+                result_statement.push(build_foreach(statement, &known_types)),
+            Rule::StmtDefineType => {
+                let (new_stmt, new_known_types) =  build_define_type(statement, known_types);
+                known_types = new_known_types;
+                result_statement.push(new_stmt)
             }
-            Rule::StmtBreak => {
-                result_statement.push(Statement::Break)
-            }
-            Rule::StmtWhile => {
-                result_statement.push(build_stmtwhile(statement, &known_types))
-            }
-            Rule::StmtIf => {
-                result_statement.push(build_stmtif(statement, &known_types))
-            }
-            Rule::StmtForIndex {
-
+            Rule::StmtFuncDef => {
+                let (new_stmt, new_known_types) =  build_functiondefinition(statement, known_types);
+                known_types = new_known_types;
+                result_statement.push(new_stmt)
             }
             _ => panic!("Impossible statement"),
         };
@@ -115,18 +121,20 @@ fn build_stmtdefine<'a>(
 }
 
 
-fn build_stmtassign(
-    stmt: Pair<Rule>,
-    known_types: &TreeMap<& str, Type>,
-) -> Vec<Statement> {
+fn build_stmtassign<'a>(
+    stmt: Pair<'a, Rule>,
+    known_types: &TreeMap<&'a str, Type>,
+) -> (Vec<Statement>, TreeMap<&'a str, Type>) {
+
     let mut assignments_and_exps = stmt.into_inner();
-    let mut assignments = assignments_and_exps.next().unwrap().into_inner();
+    let assignments = assignments_and_exps.next().unwrap().into_inner();
     let mut exps = assignments_and_exps.next().unwrap().into_inner();
     // This is used to check if the order of the types are correct
     let mut result_assignments = Vec::new();
+    let mut known_types = known_types.clone();
 
 
-    while let Some(var_pair) = assignments.next() {
+    for var_pair in assignments {
         if let Some(exp_pair) = exps.next() {
             let var = build_var(var_pair, &known_types);
             let exp = build_exp(exp_pair, &known_types);
@@ -134,7 +142,7 @@ fn build_stmtassign(
                 result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
             } else {
                 // Add something to infer types, or maybe not, idk
-                panic!("Var type doens't match the Exp type")
+                panic!("Var type {:?} doens't match the Exp type {:?}", var.vartype, exp.exptype)
             }
 
 
@@ -150,9 +158,9 @@ fn build_stmtwhile (
     known_types: &TreeMap<& str, Type>,
 ) -> Statement {
         let mut inners = stmt.into_inner();
-        let exp = build_exp(inners.next().unwrap(), &known_types);
+        let exp = build_exp(inners.next().unwrap(), known_types);
         if same_type(&exp.exptype, &boolean_type()) {
-            let block = build_block(inners.next().unwrap(), &known_types);
+            let block = build_block(inners.next().unwrap(), known_types);
             Statement::While { condition: exp, block: Box::new(block) }
         } else {
             panic!("While statement has a non-boolean expression")
@@ -164,20 +172,20 @@ fn build_stmtif (
     known_types: &TreeMap<& str, Type>,
 ) -> Statement {
     let mut inners = stmt.into_inner();
-    let if_exp = build_exp(inners.next().unwrap(), &known_types);
+    let if_exp = build_exp(inners.next().unwrap(), known_types);
 
     if same_type(&if_exp.exptype, &boolean_type()) {
-        let block = build_block(inners.next().unwrap(), &known_types);
+        let block = build_block(inners.next().unwrap(), known_types);
         let mut elseifs = Vec::new();
         let mut else_block = None;
         while let Some(elif_or_elseblock_pair) = inners.next() {
             //since the parser checks stuff, we don't need to check if we reached the end or not
             match elif_or_elseblock_pair.as_rule() {
-                Rule::Block => else_block = Some(build_block(elif_or_elseblock_pair, &known_types)),
+                Rule::Block => else_block = Some(build_block(elif_or_elseblock_pair, known_types)),
                 Rule::Exp => {
-                    let elif_exp = build_exp(elif_or_elseblock_pair, &known_types);
+                    let elif_exp = build_exp(elif_or_elseblock_pair, known_types);
                     if same_type(&elif_exp.exptype, &boolean_type()) {
-                        let elif_block = build_block(inners.next().unwrap(), &known_types);
+                        let elif_block = build_block(inners.next().unwrap(), known_types);
                         elseifs.push((elif_exp, elif_block))
                     } else {
                         panic!("Elif expression isn't a boolean")
@@ -201,23 +209,19 @@ fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statem
     let mut known_types = known_types.clone();
     let define_type_variant = match assign_or_define.as_rule() {
         Rule::StmtAssign => {
-            let assign = build_stmtassign(assign_or_define, &known_types);
+            let mut assign = build_stmtassign(assign_or_define, &known_types);
             if assign.len() != 1 {
                 panic!("More than one assignment in for");
             }
-            assign.first()
+            assign.pop().unwrap()
         }
         Rule::StmtDefine => {
-            let (define, new_known_types) = build_stmtdefine(stmt, &known_types);
+            let (mut define, new_known_types) = build_stmtdefine(assign_or_define, &known_types);
             if define.len() != 1 {
                 panic!("More than one definition in for");
             }
-            let define_stmt = match define.first().unwrap() {
-                Statement::Define(a)  => a.clone().to_owned(),
-                _ => panic!("Impossible")
-
-            };
-            ForIndexElement::DefineStmt(define_stmt.clone())
+            known_types = new_known_types;
+            define.pop().unwrap()
         }
         _ => panic!("Impossible Statement in For")
     };
@@ -234,7 +238,7 @@ fn build_forindex(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Statem
         _ => panic!("Impossible For element")
     };
 
-    Statement::ForIndex { starting_value: define_type_variant, condition, exp: lastexp_opt, block: Box::new(forblock) }
+    Statement::ForIndex { starting_value: Box::new(define_type_variant), condition, exp: lastexp_opt, block: Box::new(forblock) }
     
 }
 
@@ -248,7 +252,7 @@ fn build_foreach(stmt: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Stateme
 
 fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Type>) -> (Statement, TreeMap<&'a str, Type>)  {
     let mut inners = stmt.into_inner();
-    let mut known_types = known_types.clone();
+    let known_types = known_types.clone();
     //TODO: add other variants
     let name = inners.next().unwrap().to_string(); 
     //This is for the stmt
@@ -258,7 +262,8 @@ fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Typ
     while let Some(attribute_name) = inners.next() {
         if let Some(attribute_type) = inners.next() {
             let new_type = parse_type(attribute_type);
-            types.insert(attribute_name.to_string(), new_type);
+            types.insert(attribute_name.to_string(), new_type.clone());
+            type_definitions.push((attribute_name.to_string(), new_type));
 
              
         } else {
@@ -267,13 +272,51 @@ fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Typ
     }
 
     //TODO: do something for defined types, not for known types of variables
-    known_types.insert(&name, Type::Composite(Composite{name: Some(name), types}));
+    known_types.insert(&name, Type::Composite(Composite{name: Some(name.clone()), types}));
     //change variant later
     (Statement::DefineType { variant: astroast::DefineTypeVariant::Struct, name, type_definitions }, known_types)
 
     // Adicionar novo tipo à known_types
-
 }
+
+
+fn build_functiondefinition<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Type>) -> (Statement, TreeMap<&'a str, Type>)  {
+    //TODO: add more
+    let mut inners = stmt.into_inner();
+    let variant = FunctionVariant::Function;
+    //HAcky
+
+    let name_pair = inners.next().unwrap();
+    let name = build_funcname(name_pair.clone());
+    let body = build_function_body(inners.next().unwrap(), &known_types);
+    let body_type = body.function_type.clone();
+    let known_types = known_types.insert(name_pair.as_str(), body_type);
+    (Statement::FunctionDefinition { variant, name, body }, known_types)
+    
+}
+
+fn build_funcname(funcname_pair: Pair<Rule>) -> FuncName {
+    let mut inners = funcname_pair.into_inner();
+    let name = inners.next().unwrap().to_string();
+    let mut dot = Vec::new();
+    let mut colon = None;
+    for dot_or_colon in inners {
+        match dot_or_colon.as_rule() {
+            Rule::FuncDot => {
+                dot.push(dot_or_colon.as_str().to_string())
+            }
+            Rule::FuncColon => {
+                colon = Some(dot_or_colon.as_str().to_string())
+            }
+            _ => panic!("Impossible funcname")
+        }
+
+    }
+    FuncName { name, dot, colon }
+    
+}
+
+
 
 fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
     match unary_op_str {
@@ -354,7 +397,7 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
             //TODO: transform tuple to composite type, since every element of the tuple can be of different type and this will help indexing it in the same way composite types are indexed
         }
 
-        _ => panic!("Impossible Expression"),
+        _ => panic!("Impossible Expression {:?}", exp_pair),
     };
 
     Exp {
