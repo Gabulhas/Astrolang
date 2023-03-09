@@ -141,10 +141,9 @@ fn build_stmtassign<'a>(
             if same_type(&var.vartype, &exp.exptype) {
                 result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
             } else {
-                // Add something to infer types, or maybe not, idk
+                // TODO: Add something to infer types, or maybe not, idk
                 panic!("Var type {:?} doens't match the Exp type {:?}", var.vartype, exp.exptype)
             }
-
 
         } else {
             panic!("Non matching exp")
