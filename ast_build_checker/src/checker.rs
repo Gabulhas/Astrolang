@@ -416,7 +416,7 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
     }
 }
 
-fn build_binaryexp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> ExpContent {
+fn build_binaryexp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
     let mut exps = Vec::new();
     let mut ops_parsed = Vec::new();
     for exp_or_op in exp_pair.into_inner() {
@@ -429,27 +429,79 @@ fn build_binaryexp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> E
     }
 
 
-    let ops_iterator = ops_parsed.iter();
-    let mut left = None;
-    let mut right = None;
+/*
+convert the token sequence into an AST:
+Traverse the token sequence from left to right, building up the AST.
+When encountering an operator token, compare its precedence with the precedence of the operator at the top of the operator stack.
+
+If the new operator has higher precedence, push it onto the operator stack. 
+If the new operator has lower or equal precedence, pop operators from the operator stack until the top operator has lower precedence or the stack is empty, and add each popped operator to the AST.
+Then push the new operator onto the stack.
+
+When the token sequence is finished, pop all remaining operators from the operator stack and add them to the AST in the order they were popped.
+
+Return the root node of the AST.
+*/
+    let mut ops_iterator = ops_parsed.iter();
 
     let mut output_stack = Vec::new();
     let mut op_stack = Vec::new();
 
-    for exp in exps {
-        output_stack.push(exp);
-        let op = ops_iterator.next().unwrap().clone();
-         
-            
+    fn pop_to_ast(output_stack: &mut Vec<Exp>, op_stack: &mut Vec<(BinopSign, i32, Type, Type)>, sign: &BinopSign, left_right_exps: &Type, result_type: &Type) {
+        op_stack.pop().unwrap();
+        let a_exp = output_stack.pop().unwrap();
+        let b_exp = output_stack.pop().unwrap();
 
+        let a_type = a_exp.exptype.clone();
+        let b_type = a_exp.exptype.clone();
+        if same_type(&a_type, &b_type) && same_type(&a_type, &left_right_exps) {
+           let new_binop_exp = Exp {
+               exptype: result_type.clone(),
+               contents: Box::new(
+                   ExpContent::Binop { left: a_exp, sign: sign.clone(), right: b_exp }
+                )
+           };
+           output_stack.push(new_binop_exp)
+
+        } else {
+            panic!("The expected types in the binop aren't correct")
+        }
 
     }
 
-    ExpContent::Binop { left: (), sign: (), right: () }
 
+    for exp in exps {
+        output_stack.push(exp);
+        let op = ops_iterator.next().unwrap().clone();
 
+        loop {
+            match op_stack.last() {
+                None => {
+                    op_stack.push(op);
+                    break
+                },
+                Some(top)  => {
+                    let (_, op_prec, _, _ ) = op;
+                    let (sign, top_prec, left_right_exps, result_type) = &*top;
+                    if op_prec > *top_prec {
+                        op_stack.push(op);
+                        break
+                    } else {
+                        pop_to_ast(&mut output_stack, &mut op_stack, sign ,left_right_exps, result_type)
+                    }
 
-    
+                }
+
+            }
+        }
+
+    }
+
+    for (sign, _, left_right_exps, result_type) in op_stack {
+        pop_to_ast(&mut output_stack, &mut op_stack, &sign, &left_right_exps, &result_type)
+    }
+    output_stack.pop().unwrap()
+
 }
 
 
