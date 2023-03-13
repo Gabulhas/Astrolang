@@ -1,62 +1,62 @@
 use std::fmt;
 use types::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub contents: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionBody {
     pub parameter_list: Vec<String>,
     pub function_type: Type,
     pub block: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Block {
     pub statements: Vec<Statement>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Field {
     Square { key: Exp, exp: Exp },
     Dot { key: String, exp: Exp },
     Literal(Exp),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionCall {
     pub var: Var,
     pub call: Vec<Call>,
     pub calltype: Type
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TableConstructor {
     pub fields: Vec<Field>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AtomicExp {
     Ident(String),
     Exp(Exp),
 }
 
 //This is for indexing a value, like a.potato, or a["key"], or a[4]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Index {
     Square(Exp),
     Dot(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VarAux {
     Call(Call),
     Index(Index),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Var {
     pub atomic_exp: AtomicExp,
     pub rest: Vec<VarAux>,
@@ -64,7 +64,7 @@ pub struct Var {
     pub vartype: Type,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncName {
     pub name: String,
     pub dot: Vec<String>,
@@ -87,19 +87,19 @@ impl fmt::Display for FuncName {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DefineStmt {
     pub var: String,
     pub exp: Option<Exp>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AssignStmt {
     pub var: Var,
     pub exp: Exp,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DefineTypeVariant {
     Struct,
     Context,
@@ -107,7 +107,7 @@ pub enum DefineTypeVariant {
     Record,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FunctionVariant {
     Function,
     Instruction,
@@ -115,7 +115,7 @@ pub enum FunctionVariant {
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Define(DefineStmt),
     Assign(AssignStmt),
@@ -163,26 +163,26 @@ pub enum Statement {
     potato a
 */
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Call {
     ArgList(Vec<Exp>),
     TableConstructor(TableConstructor),
     LiteralString(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     FunctionCall(FunctionCall),
     Var(Var),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Exp {
     pub contents: Box<ExpContent>,
     pub exptype: Type,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ExpContent {
     Nil,
     False,
@@ -194,8 +194,10 @@ pub enum ExpContent {
     Value(Value),
     TableConstructor(TableConstructor),
     Binop {
-        first: Exp,
-        chain: Vec<(BinopSign, Exp)>
+        left: Exp,
+        sign: BinopSign,
+        right: Exp
+
     },
     Unop {
         sign: UnopSign,
@@ -204,7 +206,7 @@ pub enum ExpContent {
     Tuple(Vec<Exp>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinopSign {
     DoubleGreat,
     DoubleLess,
@@ -229,7 +231,7 @@ pub enum BinopSign {
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnopSign {
     Hash, //#
     Neg,  //-

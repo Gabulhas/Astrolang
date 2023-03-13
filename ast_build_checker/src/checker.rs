@@ -124,34 +124,38 @@ fn build_stmtdefine<'a>(
 fn build_stmtassign<'a>(
     stmt: Pair<'a, Rule>,
     known_types: &TreeMap<&'a str, Type>,
-) -> (Vec<Statement>, TreeMap<&'a str, Type>) {
-
+) -> Vec<Statement> {
     let mut assignments_and_exps = stmt.into_inner();
     let assignments = assignments_and_exps.next().unwrap().into_inner();
     let mut exps = assignments_and_exps.next().unwrap().into_inner();
-    // This is used to check if the order of the types are correct
-    let mut result_assignments = Vec::new();
-    let mut known_types = known_types.clone();
 
+    let mut result_assignments = Vec::new();
 
     for var_pair in assignments {
         if let Some(exp_pair) = exps.next() {
-            let var = build_var(var_pair, &known_types);
-            let exp = build_exp(exp_pair, &known_types);
+            let var = build_var(var_pair, known_types);
+            let exp = build_exp(exp_pair, known_types);
             if same_type(&var.vartype, &exp.exptype) {
                 result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
+            } else if let (Type::Primitive(PrimitiveType::Integer(a, b)), Type::Primitive(PrimitiveType::Integer(IntegerSign::Undefined, BitSize::Undefined))) = (&var.vartype, &exp.exptype) {
+                let new_type = Type::Primitive(PrimitiveType::Integer(a.clone(), b.clone()));
+                let exp = update_integer_recursively(&undefined_integer(), &new_type, &exp);
+                result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
             } else {
-                // TODO: Add something to infer types, or maybe not, idk
-                panic!("Var type {:?} doens't match the Exp type {:?}", var.vartype, exp.exptype)
+                panic!("Var type {:?} doesn't match the Exp type {:?}", var.vartype, exp.exptype);
             }
-
         } else {
             panic!("Non matching exp")
         }
     }
-    result_assignments
 
+    result_assignments
 }
+
+
+
+
+
 fn build_stmtwhile (
     stmt: Pair<Rule>,
     known_types: &TreeMap<& str, Type>,
@@ -329,31 +333,31 @@ fn get_unary_op(unary_op_str: &str) -> (UnopSign, Type)  {
 }
 
 // the sign, the left and right types, and the return type
-fn get_binary_op(binary_op_str: &str) -> (BinopSign, Type, Type) {
+fn get_binary_op(binary_op_str: &str) -> (BinopSign, i32 ,Type, Type) {
     match binary_op_str {
-        ">>"  => (BinopSign::DoubleGreat, undefined_integer(), undefined_integer()),
-        "<<"  => (BinopSign::DoubleLess, undefined_integer(), undefined_integer()),
-        "<="  => (BinopSign::LessEquals, undefined_integer(), boolean_type()),
-        ">="  => (BinopSign::GreaterEquals, undefined_integer(), boolean_type()),
-        "=="  => (BinopSign::Equals, undefined_type(), boolean_type()),
-        "~="  => (BinopSign::Different,undefined_type(), boolean_type()),
-        "//"  => (BinopSign::DoubleSlash, undefined_integer(), undefined_integer()),
-        "+"   => (BinopSign::Plus, undefined_number(), undefined_number()),
-        "-"   => (BinopSign::Minus,undefined_number(), undefined_number()),
-        "*"   => (BinopSign::Mult,undefined_number(), undefined_number()),
-        "/"   => (BinopSign::SingleSlash,undefined_number(), undefined_number()),
-        "^"   => (BinopSign::Carrot,undefined_number(), undefined_number()),
-        "%"   => (BinopSign::Percentile,undefined_number(), undefined_number()),
-        "&"   => (BinopSign::Appersand, boolean_type(), boolean_type()),
-        "~"   => (BinopSign::Tilda, boolean_type(), boolean_type()),
-        "|"   => (BinopSign::Bar, boolean_type(), boolean_type()),
-        ".."  => (BinopSign::DoubleDot, undefined_type(), undefined_type()),
-        "<"   => (BinopSign::Less, undefined_number(), undefined_number()),
-        ">"   => (BinopSign::Greater, undefined_number(), undefined_number()),
-        "and" => (BinopSign::And, boolean_type(), boolean_type()),
-        "or"  => (BinopSign::Or, boolean_type(), boolean_type()),
+        //TODO: fix these precedence values
+        ">>"  => (BinopSign::DoubleGreat,   4, undefined_integer(), undefined_integer()),
+        "<<"  => (BinopSign::DoubleLess,    4, undefined_integer(), undefined_integer()),
+        "<="  => (BinopSign::LessEquals,    2, undefined_integer(), boolean_type()),
+        ">="  => (BinopSign::GreaterEquals, 2, undefined_integer(), boolean_type()),
+        "=="  => (BinopSign::Equals,        2, undefined_type(), boolean_type()),
+        "~="  => (BinopSign::Different,     2, undefined_type(), boolean_type()),
+        "//"  => (BinopSign::DoubleSlash,   3, undefined_integer(), undefined_integer()),
+        "+"   => (BinopSign::Plus,          2, undefined_number(), undefined_number()),
+        "-"   => (BinopSign::Minus,         2, undefined_number(), undefined_number()),
+        "*"   => (BinopSign::Mult,          3, undefined_number(), undefined_number()),
+        "/"   => (BinopSign::SingleSlash,   3, undefined_number(), undefined_number()),
+        "^"   => (BinopSign::Carrot,        4, undefined_number(), undefined_number()),
+        "%"   => (BinopSign::Percentile,    3, undefined_number(), undefined_number()),
+        "&"   => (BinopSign::Appersand,     2, boolean_type(), boolean_type()),
+        "~"   => (BinopSign::Tilda,         2, boolean_type(), boolean_type()),
+        "|"   => (BinopSign::Bar,           2, boolean_type(), boolean_type()),
+        ".."  => (BinopSign::DoubleDot,     0, undefined_type(), undefined_type()),
+        "<"   => (BinopSign::Less,          2, undefined_number(), undefined_number()),
+        ">"   => (BinopSign::Greater,       2, undefined_number(), undefined_number()),
+        "and" => (BinopSign::And,           1, boolean_type(), boolean_type()),
+        "or"  => (BinopSign::Or,            1, boolean_type(), boolean_type()),
         _ => panic!("Impossible binary op str")
-
     }
 
 }
@@ -391,6 +395,13 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
              
         }
 
+        Rule::BinaryOpExp => {
+            let exp = build_binaryexp(exp_pair, known_types);
+            let exp_clone = exp.exptype.clone();
+            (*exp.contents, exp_clone)
+
+        }
+
         Rule::TupleExp => {
             panic!("Not implemented yet")
             //TODO: transform tuple to composite type, since every element of the tuple can be of different type and this will help indexing it in the same way composite types are indexed
@@ -404,6 +415,43 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
         exptype
     }
 }
+
+fn build_binaryexp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> ExpContent {
+    let mut exps = Vec::new();
+    let mut ops_parsed = Vec::new();
+    for exp_or_op in exp_pair.into_inner() {
+        match exp_or_op.as_rule() {
+            Rule::ExpAtom => exps.push(build_exp(exp_or_op, known_types)),
+            Rule::BinaryOp => ops_parsed.push(get_binary_op(exp_or_op.as_str())),
+            _ => panic!("Impossible binary exp")
+
+        }
+    }
+
+
+    let ops_iterator = ops_parsed.iter();
+    let mut left = None;
+    let mut right = None;
+
+    let mut output_stack = Vec::new();
+    let mut op_stack = Vec::new();
+
+    for exp in exps {
+        output_stack.push(exp);
+        let op = ops_iterator.next().unwrap().clone();
+         
+            
+
+
+    }
+
+    ExpContent::Binop { left: (), sign: (), right: () }
+
+
+
+    
+}
+
 
 //Used to recursivly change the expression types, as they default to i32, and might defined as u64 or something
 //fn change_exp_type(exp: Exp, previous_type: Type, new_type: Type) {}
@@ -611,7 +659,7 @@ fn build_index(index_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>, indexe
                             let inner_exp = update_integer_recursively(
                                 &undefined_integer(),
                                 &Type::Primitive( PrimitiveType::Integer(IntegerSign::Unsigned, BitSize::Size)), 
-                                inner_exp);
+                                &inner_exp);
                             (Index::Square(inner_exp), *((value_type).clone()))
                         },
                         _ => panic!("You can only index an array using a integer")
@@ -627,7 +675,7 @@ fn build_index(index_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>, indexe
                             let inner_exp = update_integer_recursively(
                                 &undefined_integer(),
                                 &Type::Primitive( PrimitiveType::Integer(IntegerSign::Unsigned, BitSize::Size)), 
-                                inner_exp);
+                                &inner_exp);
                                 (Index::Square(inner_exp), *((value_type).clone()))
                                 
                             }
@@ -662,23 +710,29 @@ fn build_index(index_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>, indexe
 }
 
 
-fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: Exp) -> Exp {
-    let exp_type = exp.exptype;
-    let exp_contents = *exp.contents;
+fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: &Exp) -> Exp {
+    let exp_type = &exp.exptype;
+    let exp_contents = &*exp.contents;
     let new_contents = match exp_contents {
         ExpContent::Number(ref n) => {
-            if same_type(previous_integer, &exp_type) {
+            if same_type(previous_integer, exp_type) {
                 ExpContent::Number(n.to_string())
             } else {
-                exp_contents
+                exp_contents.to_owned()
             }
         }
         ExpContent::Unop { sign, exp } => {
             let new_exp = update_integer_recursively(previous_integer, new_integer, exp);
             ExpContent::Unop {
-                sign,
+                sign: sign.clone(),
                 exp: new_exp,
             }
+        }
+        ExpContent::Binop {left, sign, right} => {
+            let left = update_integer_recursively(previous_integer, new_integer, left);
+            let right = update_integer_recursively(previous_integer, new_integer, right);
+            ExpContent::Binop { left, sign: sign.clone(), right }
+
         }
         ExpContent::Value(_) => panic!("Not implemented yet"),
         ExpContent::AnonFuncDef(_) => panic!("Not implemented yet"),
@@ -693,13 +747,13 @@ fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: 
         //        right: new_right,
         //    }
         //}
-        _ => exp_contents,
+        _ => exp_contents.clone(),
     };
     Exp {
-        exptype: if same_type(previous_integer, &exp_type) {
+        exptype: if same_type(previous_integer, exp_type) {
             new_integer.clone()
         } else {
-            exp_type
+            exp_type.clone()
         },
         contents: Box::new(new_contents),
     }
