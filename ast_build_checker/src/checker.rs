@@ -137,13 +137,22 @@ fn build_stmtassign<'a>(
             let exp = build_exp(exp_pair, known_types);
             if same_type(&var.vartype, &exp.exptype) {
                 result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
-            } else if let (Type::Primitive(PrimitiveType::Integer(a, b)), Type::Primitive(PrimitiveType::Integer(IntegerSign::Undefined, BitSize::Undefined))) = (&var.vartype, &exp.exptype) {
-                let new_type = Type::Primitive(PrimitiveType::Integer(a.clone(), b.clone()));
-                let exp = update_integer_recursively(&undefined_integer(), &new_type, &exp);
-                result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
-            } else {
-                panic!("Var type {:?} doesn't match the Exp type {:?}", var.vartype, exp.exptype);
+            } else  {
+                match (&var.vartype, &exp.exptype) {
+                    (Type::Primitive(PrimitiveType::Integer(_, _)), Type::Primitive(PrimitiveType::Integer(IntegerSign::Undefined, BitSize::Undefined))) 
+                        | (Type::Primitive(PrimitiveType::Integer(_, _)), Type::UndefinedNumber ) => {
+
+                        let exp = update_integer_recursively(&exp.exptype, &var.vartype, &exp);
+                        result_assignments.push(Statement::Assign(astroast::AssignStmt { var, exp }));
+
+                    }
+                    _ => panic!("Var type {:?} ({:?}) doesn't match the Exp type {:?} ({:?})", var.vartype, var ,exp.exptype, exp)
+
+                }
+
             }
+
+
         } else {
             panic!("Non matching exp")
         }
@@ -166,7 +175,7 @@ fn build_stmtwhile (
             let block = build_block(inners.next().unwrap(), known_types);
             Statement::While { condition: exp, block: Box::new(block) }
         } else {
-            panic!("While statement has a non-boolean expression")
+            panic!("While statement has a non-boolean expression {:#?}", exp )
         }
 }
 
@@ -201,7 +210,7 @@ fn build_stmtif (
         Statement::If { condition: if_exp, then_block: Box::new(block), elseifs, else_block }
 
     } else {
-        panic!("While statement has a non-boolean expression")
+        panic!("If statement has a non-boolean expression")
     }
 
 }
@@ -257,7 +266,7 @@ fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Typ
     let mut inners = stmt.into_inner();
     let known_types = known_types.clone();
     //TODO: add other variants
-    let name = inners.next().unwrap().to_string(); 
+    let name = inners.next().unwrap().as_str().to_string(); 
     //This is for the stmt
     let mut type_definitions = Vec::new();
     //This is for the type
@@ -265,8 +274,8 @@ fn build_define_type<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a str, Typ
     while let Some(attribute_name) = inners.next() {
         if let Some(attribute_type) = inners.next() {
             let new_type = parse_type(attribute_type);
-            types.insert(attribute_name.to_string(), new_type.clone());
-            type_definitions.push((attribute_name.to_string(), new_type));
+            types.insert(attribute_name.as_str().to_string(), new_type.clone());
+            type_definitions.push((attribute_name.as_str().to_string(), new_type));
 
              
         } else {
@@ -293,7 +302,7 @@ fn build_functiondefinition<'a>(stmt: Pair<'a, Rule>, known_types: TreeMap<&'a s
     let name = build_funcname(name_pair.clone());
     let body = build_function_body(inners.next().unwrap(), &known_types);
     let body_type = body.function_type.clone();
-    let known_types = known_types.insert(name_pair.as_str(), body_type);
+    let known_types = known_types.insert(name_pair.as_span().as_str(), body_type);
     (Statement::FunctionDefinition { variant, name, body }, known_types)
     
 }
@@ -353,8 +362,8 @@ fn get_binary_op(binary_op_str: &str) -> (BinopSign, i32 ,Type, Type) {
         "~"   => (BinopSign::Tilda,         2, boolean_type(), boolean_type()),
         "|"   => (BinopSign::Bar,           2, boolean_type(), boolean_type()),
         ".."  => (BinopSign::DoubleDot,     0, undefined_type(), undefined_type()),
-        "<"   => (BinopSign::Less,          2, undefined_number(), undefined_number()),
-        ">"   => (BinopSign::Greater,       2, undefined_number(), undefined_number()),
+        "<"   => (BinopSign::Less,          2, undefined_number(), boolean_type()),
+        ">"   => (BinopSign::Greater,       2, undefined_number(), boolean_type()),
         "and" => (BinopSign::And,           1, boolean_type(), boolean_type()),
         "or"  => (BinopSign::Or,            1, boolean_type(), boolean_type()),
         _ => panic!("Impossible binary op str")
@@ -369,15 +378,15 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
         Rule::LiteralNil => (astroast::ExpContent::Nil, Type::Primitive(PrimitiveType::Unit)),
         Rule::LiteralTrue => ( astroast::ExpContent::True, boolean_type()),
         Rule::LiteralFalse => (astroast::ExpContent::False, boolean_type()),
-        Rule::LiteralNumber => (astroast::ExpContent::Number(exp_pair.to_string()), integer_type(IntegerSign::Undefined, BitSize::Undefined)),
-        Rule::LiteralString => (astroast::ExpContent::EString(exp_pair.to_string()), array_type(char_type())),
+        Rule::LiteralNumber => (astroast::ExpContent::Number(exp_pair.as_str().to_string()), integer_type(IntegerSign::Undefined, BitSize::Undefined)),
+        Rule::LiteralString => (astroast::ExpContent::EString(exp_pair.as_str().to_string()), array_type(char_type())),
         Rule::AnonFuncDef => {
             let built_function = build_function_body(exp_pair, &known_types.clone());
             let function_type = built_function.function_type.clone();
             (astroast::ExpContent::AnonFuncDef(built_function), function_type)
         }
         Rule::Value => {
-            let (value, value_type)  =  build_value(exp_pair, known_types);
+            let (value, value_type) = build_value(exp_pair, known_types);
             (astroast::ExpContent::Value(value), value_type)
         }
 
@@ -407,7 +416,7 @@ fn build_exp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Exp {
             //TODO: transform tuple to composite type, since every element of the tuple can be of different type and this will help indexing it in the same way composite types are indexed
         }
 
-        _ => panic!("Impossible Expression {:?}", exp_pair),
+        _ => panic!("Impossible Expression {:#?}", exp_pair),
     };
 
     Exp {
@@ -421,9 +430,8 @@ fn build_binaryexp(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> E
     let mut ops_parsed = Vec::new();
     for exp_or_op in exp_pair.into_inner() {
         match exp_or_op.as_rule() {
-            Rule::ExpAtom => exps.push(build_exp(exp_or_op, known_types)),
             Rule::BinaryOp => ops_parsed.push(get_binary_op(exp_or_op.as_str())),
-            _ => panic!("Impossible binary exp")
+            _ => exps.push(build_exp(exp_or_op, known_types))
 
         }
     }
@@ -447,14 +455,13 @@ Return the root node of the AST.
     let mut output_stack = Vec::new();
     let mut op_stack = Vec::new();
 
-    fn pop_to_ast(output_stack: &mut Vec<Exp>, op_stack: &mut Vec<(BinopSign, i32, Type, Type)>, sign: &BinopSign, left_right_exps: &Type, result_type: &Type) {
-        op_stack.pop().unwrap();
-        let a_exp = output_stack.pop().unwrap();
-        let b_exp = output_stack.pop().unwrap();
+    fn pop_to_ast(output_stack: &mut Vec<Exp>, sign: &BinopSign, left_right_exps: &Type, result_type: &Type) {
 
+        let (a_exp, b_exp) = handle_two_different_numbers(output_stack.pop().unwrap(), output_stack.pop().unwrap());
         let a_type = a_exp.exptype.clone();
-        let b_type = a_exp.exptype.clone();
-        if same_type(&a_type, &b_type) && same_type(&a_type, &left_right_exps) {
+        let b_type = b_exp.exptype.clone();
+
+        if same_type(&a_type, left_right_exps) {
            let new_binop_exp = Exp {
                exptype: result_type.clone(),
                contents: Box::new(
@@ -464,7 +471,30 @@ Return the root node of the AST.
            output_stack.push(new_binop_exp)
 
         } else {
-            panic!("The expected types in the binop aren't correct")
+            match (&a_type, left_right_exps) {
+                (Type::Primitive(PrimitiveType::Integer(_, _)), Type::UndefinedNumber) 
+                    | (Type::Primitive(PrimitiveType::Float(BitSize::Undefined)), Type::UndefinedNumber)=> {
+                    let result_type = if same_type(result_type, &undefined_number()) {
+                        a_type.clone()
+                    } else if same_type(result_type, &boolean_type()){
+                        boolean_type() 
+                    } else {
+                        result_type.clone()
+                    };
+
+                   let new_binop_exp = Exp {
+                       exptype: result_type,
+                       contents: Box::new(
+                           ExpContent::Binop { left: a_exp, sign: sign.clone(), right: b_exp }
+                        )
+                   };
+                   output_stack.push(new_binop_exp)
+                }
+                _ => panic!("The expected types in the binop aren't correct: left {:?}, right {:?}, expected {:?}", a_type, b_type, left_right_exps)
+                 
+            }
+
+            
         }
 
     }
@@ -472,7 +502,10 @@ Return the root node of the AST.
 
     for exp in exps {
         output_stack.push(exp);
-        let op = ops_iterator.next().unwrap().clone();
+        let op = match ops_iterator.next()  {
+            Some(a) => a,
+            None => break
+        };
 
         loop {
             match op_stack.last() {
@@ -482,12 +515,13 @@ Return the root node of the AST.
                 },
                 Some(top)  => {
                     let (_, op_prec, _, _ ) = op;
-                    let (sign, top_prec, left_right_exps, result_type) = &*top;
-                    if op_prec > *top_prec {
+                    let (_, top_prec, _, _) = top;
+                    if op_prec > top_prec {
                         op_stack.push(op);
                         break
                     } else {
-                        pop_to_ast(&mut output_stack, &mut op_stack, sign ,left_right_exps, result_type)
+                        let (sign, _, left_right_exps, result_type) = op_stack.pop().unwrap();
+                        pop_to_ast(&mut output_stack, sign ,left_right_exps, result_type)
                     }
 
                 }
@@ -498,7 +532,7 @@ Return the root node of the AST.
     }
 
     for (sign, _, left_right_exps, result_type) in op_stack {
-        pop_to_ast(&mut output_stack, &mut op_stack, &sign, &left_right_exps, &result_type)
+        pop_to_ast(&mut output_stack, sign, left_right_exps, result_type)
     }
     output_stack.pop().unwrap()
 
@@ -547,6 +581,7 @@ fn build_function_body(exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) 
 
 fn build_value(value_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (Value, Type) {
     //TODO: Do typecheck
+    let value_pair = value_pair.into_inner().next().unwrap();
     match value_pair.as_rule() {
 
         Rule::Var => {
@@ -559,7 +594,7 @@ fn build_value(value_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (Va
             let func_type  = func.calltype.clone();
             (Value::FunctionCall(func), func_type)
         }
-        _ => panic!("Impossible Var")
+        _ => panic!("Impossible Value {:#?} ", value_pair)
     }
 }
 
@@ -673,22 +708,22 @@ fn build_call(call_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>, function
 } 
 
 
-fn build_atomic_exp(atomic_exp: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (AtomicExp, Type)  {
-    let atomic_exp = atomic_exp.into_inner().next().unwrap();
+fn build_atomic_exp(atomic_exp_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (AtomicExp, Type)  {
+    let atomic_exp = atomic_exp_pair.clone().into_inner().next().unwrap();
     match atomic_exp.as_rule() {
         Rule::Ident => {
             let known_type = match known_types.get(atomic_exp.as_str()) {
                 Some(t) => t,
                 None => &Type::Undefined,
             };
-            (AtomicExp::Ident(atomic_exp.to_string()), known_type.clone())
+            (AtomicExp::Ident(atomic_exp.as_str().to_string()), known_type.clone())
         }
         Rule::Exp => {
             let result_exp = build_exp(atomic_exp, known_types);
             let result_type = result_exp.exptype.clone();
             (AtomicExp::Exp(result_exp), result_type)
         }
-        _ => panic!("Impossible atomic exp")
+        _ => panic!("Impossible atomic exp {:#?} {:#?}", atomic_exp_pair, atomic_exp)
     } 
 }
 
@@ -761,6 +796,24 @@ fn build_index(index_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>, indexe
     }
 }
 
+fn handle_two_different_numbers(a: Exp, b: Exp) -> (Exp, Exp) {
+    if same_type(&a.exptype, &b.exptype) {
+        (a, b)
+    } else {
+        match (&a.exptype, &b.exptype) {
+            (Type::Primitive(PrimitiveType::Integer(IntegerSign::Undefined, BitSize::Undefined)), Type::Primitive(PrimitiveType::Integer(_, _))) => {
+                (update_integer_recursively(&a.exptype, &b.exptype, &a), b)
+            }
+            (Type::Primitive(PrimitiveType::Integer(_, _)), Type::Primitive(PrimitiveType::Integer(IntegerSign::Undefined, BitSize::Undefined))) => {
+                (update_integer_recursively(&b.exptype, &a.exptype, &a), b)
+            }
+            //TODO: there are missing ones for flaots
+        _ => panic!("Not possible to join both types")
+        }
+    }
+
+}
+
 
 fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: &Exp) -> Exp {
     let exp_type = &exp.exptype;
@@ -786,10 +839,9 @@ fn update_integer_recursively(previous_integer: &Type, new_integer: &Type, exp: 
             ExpContent::Binop { left, sign: sign.clone(), right }
 
         }
-        ExpContent::Value(_) => panic!("Not implemented yet"),
-        ExpContent::AnonFuncDef(_) => panic!("Not implemented yet"),
-        ExpContent::TableConstructor(_) => panic!("Not implemented yet"),
-        ExpContent::Tuple(_) => panic!("Not implemented yet"),
+        ExpContent::AnonFuncDef(_) =>       panic!("Not implemented yet {:?}", exp_contents),
+        ExpContent::TableConstructor(_) =>  panic!("Not implemented yet {:?}", exp_contents),
+        ExpContent::Tuple(_) =>             panic!("Not implemented yet {:?}", exp_contents),
         //ExpContent::Binop { left, sign, right } => {
         //    let new_left = update_integer_recursively(previous_integer, new_integer, left);
         //    let new_right = update_integer_recursively(previous_integer, new_integer, right);
