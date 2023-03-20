@@ -43,7 +43,7 @@ fn build_block(block: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Block {
                 }
             }
             Rule::StmtFuncCall => 
-                result_statement.push(Statement::FunctionCall(build_function_call(statement, &known_types))),
+                result_statement.push(Statement::FunctionCall(build_function_call(statement.into_inner().next().unwrap(), &known_types))),
             Rule::StmtBreak => 
                 result_statement.push(Statement::Break),
             Rule::StmtWhile => 
@@ -64,7 +64,7 @@ fn build_block(block: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Block {
                 known_types = new_known_types;
                 result_statement.push(new_stmt)
             }
-            _ => panic!("Impossible statement"),
+            _ => panic!("Impossible statement {:#?}", statement),
         };
     }
     Block {
@@ -600,6 +600,7 @@ fn build_value(value_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> (Va
 
 
 fn build_function_call(function_call_pair: Pair<Rule>,  known_types: &TreeMap<&str, Type>) -> FunctionCall {
+    println!("Function call {:#?}", function_call_pair);
     let mut inners =  function_call_pair.into_inner();
     let call_var = build_var(inners.next().unwrap(), known_types);
     let mut previous_type = call_var.vartype.clone();
@@ -611,7 +612,7 @@ fn build_function_call(function_call_pair: Pair<Rule>,  known_types: &TreeMap<&s
             previous_type = calltype
 
         } else {
-            panic!("You are calling a non function")
+            panic!("You are calling a non function {:#?}", call)
         }
     }
 
@@ -620,8 +621,11 @@ fn build_function_call(function_call_pair: Pair<Rule>,  known_types: &TreeMap<&s
 }
 
 fn build_var(var_pair: Pair<Rule>, known_types: &TreeMap<&str, Type>) -> Var {
+    println!("var pair {:#?}",  var_pair);
     let mut inners = var_pair.into_inner();
-    let (atomic_exp, atomic_type) = build_atomic_exp(inners.next().unwrap(), known_types);
+    let atomic_exp = inners.next().unwrap();
+    println!("var atomic exp {:#?}", atomic_exp);
+    let (atomic_exp, atomic_type) = build_atomic_exp(atomic_exp, known_types);
     let mut previous_type = atomic_type;
     let mut var_calls_and_indexes = Vec::new();
     for varaux in inners {
